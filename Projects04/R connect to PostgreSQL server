@@ -1,0 +1,65 @@
+## connect to PostgreSQL server
+library(RPostgreSQL)
+library(tidyverse)
+
+##create connection 
+con <- dbConnect(
+  PostgreSQL(),
+  host = 	"floppy.db.elephantsql.com",
+  dbname = "bvorswoz",
+  user = "bvorswoz",
+  password = "M8Vv-FlkFynRRcvUw6cxtoOzvelWAaxZ",
+  port = 5432
+)
+con
+
+##db List Tables
+dbListTables(con)
+
+dbWriteTable(con, "products", products)
+
+## get data
+df <- dbGetQuery(con, "select id, product_name from products")
+
+
+## HW02 - restaurant pizza  SQL 
+## create 3-5 datframe => write table into server
+dbDisconnect(con)
+
+customers <- tribble(
+  ~customers_id, ~customers_name, ~customers_email,
+  1, "John", "john@example.com", 
+  2, "Mary", "mary@example.com", 
+  3, "Jane", "jane@example.com", 
+  4, "Jack", "jack@example.com",
+)
+
+menus <- tribble(
+  ~menu_id, ~menu_name, ~menu_price, ~size,
+  1, "Hawaiian Pizza",  200, "Small",
+  2, "Hawaiian Pizza",  300, "Medium",
+  3, "Hawaiian Pizza",  450, "Large",
+  4, "Seafood Pizza",  300, "Small",
+  5, "Seafood Pizza",  400, "Medium",
+  6, "Seafood Pizza",  550, "Large",
+  
+)
+
+orders <- tribble(
+  ~order_id, ~invoice_date, ~customer_id, ~menu_id, ~quantity,
+  1, "2023-12-19", 1, 1, 3,
+  2, "2023-12-19", 1, 2, 4,
+  3, "2023-12-19", 2, 3, 1,
+  4, "2023-12-19", 3, 1, 2,
+  5, "2023-12-20", 3, 5, 2,
+  6, "2023-12-20", 2, 2, 1,
+  7, "2023-12-20", 1, 2, 3,
+  8, "2023-12-20", 3, 4, 2,
+  9, "2023-12-20", 2, 2, 1,
+)
+
+## write table to database
+dbWriteTable(con, "customers", customers, row.names = FALSE)
+dbWriteTable(con, "orders", orders, row.names = FALSE)
+dbWriteTable(con, "menus", menus, row.names = FALSE)
+
