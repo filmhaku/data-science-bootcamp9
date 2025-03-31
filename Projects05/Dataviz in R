@@ -1,0 +1,103 @@
+---
+title: "Homework data viz"
+author: "Nattakit Film"
+date: "2024-03-18"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Homework
+
+## Explore data
+
+```{r, message=FALSE, echo=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+
+head(mpg)
+
+```
+
+
+## First chart
+
+```{r, message=TRUE, echo=TRUE}
+ggplot(mpg, aes(y = manufacturer , fill = class)) + 
+    geom_bar(linewidth = 3, alpha = 0.7)+
+    theme_classic()+
+    labs(title="Car Classes by Manufacturee")
+  
+```
+
+
+## Second chart
+
+```{r message=TRUE, echo=TRUE}
+car_class_trans<-mpg %>% 
+  mutate(transmission = if_else(grepl("^a",trans) == TRUE, "auto","manual"))
+
+ggplot(car_class_trans, aes(x = class, fill = transmission))+
+geom_bar(linewidth = 3, alpha = 0.7)+
+theme_classic()+  
+labs(title="Compare transmission by car classes")
+```
+
+## Third chart 
+```{r message=FALSE, echo=TRUE}
+
+ggplot(mpg, aes(x = cty, y = class))+
+geom_boxplot(color="blue", fill="#96C9F4", alpha=0.7) +
+theme_classic() +
+labs(title = "Boxplot city mileage and Type of car ",
+x = "city miles per gallon ",
+y = "Type of car")
+
+```
+## Fourth chart
+```{r message=FALSE, echo=TRUE}
+
+ggplot(mpg, aes(class,displ,color = class, size = displ))+
+geom_jitter(alpha = 0.7) +
+labs(title =  "Relation Between Classes and Engine displacement")
+  
+```
+## Fifth chart 
+```{r message=FALSE, echo=TRUE}
+
+ct <- ggplot(mpg,aes(displ,cty))+
+  geom_point(size = 2, alpha = 0.9 ,color = "blue")+
+  geom_smooth()+
+  geom_rug()+
+    labs(title = "engine displacement and city miles",
+       x = "Engine Displacement(in litres)",
+       y = "City Miles")+
+   coord_cartesian(xlim = c(0,10), ylim = c(0, 50))+
+  theme_minimal()
+
+hw <- ggplot(mpg,aes(displ,hwy))+
+  geom_point(size = 2, alpha = 0.9 ,color = "red")+
+  geom_smooth()+
+  geom_rug()+
+    labs(title = "engine displacement and highway miles",
+       x = "Engine Displacement(in litres)",
+       y = "Highway Miles")+
+   coord_cartesian(xlim = c(0,10) ,ylim = c(0, 50))+
+  theme_minimal()
+
+ct + hw 
+
+```
+
+```{r message=FALSE, echo=TRUE}
+ggplot(mpg, aes(cty , hwy))+
+geom_point() +
+geom_smooth(method = "lm", col="red") +
+geom_rug() +
+theme_minimal() +
+labs(title = "Relationship between city mileage and highway mileage",
+x= "city mileage (miles per gallon)",
+y=" highway mileage (miles per gallon)")
+## `geom_smooth()` using formula = 'y ~ x'
+```
