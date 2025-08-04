@@ -1,0 +1,396 @@
+function extractIdFromUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const match = url.match(/[-\w]{25,}/);
+  return match ? match[0] : null;
+}
+// --- ฟังก์ชันช่วยสำหรับแทรกรูปภาพ ---
+// วางฟังก์ชันนี้ไว้นอกฟังก์ชันหลักเพื่อความเป็นระเบียบ
+// --- ฟังก์ชันช่วยสำหรับแทรกรูปภาพ (เวอร์ชันปรับปรุงใหม่) ---
+// ฟังก์ชันนี้จะปรับขนาดรูปภาพให้พอดีกับกรอบ โดยรักษาสัดส่วนเดิม และจัดให้อยู่กึ่งกลาง
+function insertImageByPlaceholder(slide, placeholderName, fileId) {
+  if (!fileId) return; // ถ้าไม่มีไฟล์แนบมา ก็ไม่ต้องทำอะไร 
+
+  const placeholderShape = slide.getShapes().find(shape => shape.getTitle() === placeholderName);
+
+  if (placeholderShape) {
+    try {
+      const imageBlob = DriveApp.getFileById(fileId).getBlob();
+      const insertedImage = slide.insertImage(imageBlob);
+
+      // --- ส่วนที่เพิ่มเข้ามา: การคำนวณขนาดและตำแหน่งใหม่ ---
+
+      // 1. ดึงขนาดของกรอบ Placeholder และรูปภาพต้นฉบับ
+      const placeholderWidth = placeholderShape.getWidth();
+      const placeholderHeight = placeholderShape.getHeight();
+      const imageWidth = insertedImage.getInherentWidth();
+      const imageHeight = insertedImage.getInherentHeight();
+
+      // 2. คำนวณสัดส่วน (Aspect Ratio)
+      const placeholderRatio = placeholderWidth / placeholderHeight;
+      const imageRatio = imageWidth / imageHeight;
+
+      let newWidth = placeholderWidth;
+      let newHeight = placeholderHeight;
+
+      // 3. เปรียบเทียบสัดส่วนเพื่อหาขนาดใหม่ที่เหมาะสม
+      if (imageRatio > placeholderRatio) {
+        // ถ้ารูปภาพ "กว้างกว่า" กรอบ ให้ยึดความกว้างของกรอบเป็นหลัก
+        newWidth = placeholderWidth;
+        newHeight = placeholderWidth / imageRatio;
+      } else {
+        // ถ้ารูปภาพ "สูงกว่า" กรอบ ให้ยึดความสูงของกรอบเป็นหลัก
+        newHeight = placeholderHeight;
+        newWidth = placeholderHeight * imageRatio;
+      }
+
+      // 4. คำนวณตำแหน่งเพื่อจัดให้รูปภาพอยู่กึ่งกลางกรอบ
+      const leftOffset = (placeholderWidth - newWidth) / 2;
+      const topOffset = (placeholderHeight - newHeight) / 2;
+      
+      const newLeft = placeholderShape.getLeft() + leftOffset;
+      const newTop = placeholderShape.getTop() + topOffset;
+
+      // 5. กำหนดขนาดและตำแหน่งใหม่ให้กับรูปภาพ
+      insertedImage.setLeft(newLeft);
+      insertedImage.setTop(newTop);
+      insertedImage.setWidth(newWidth);
+      insertedImage.setHeight(newHeight);
+
+      // --- สิ้นสุดส่วนที่เพิ่มเข้ามา ---
+
+      // ลบ Placeholder ทิ้งไป
+      placeholderShape.remove();
+      Logger.log(`แทรกรูปภาพสำหรับ ${placeholderName} สำเร็จ`);
+    } catch (imgErr) {
+      Logger.log(`เกิดข้อผิดพลาดในการแทรกรูปภาพสำหรับ ${placeholderName}: ${imgErr.message}`);
+    }
+  }
+}
+
+
+/**
+ * ชื่อฟังก์ชัน: autoFillAndCreatePdf
+ * คำอธิบาย:
+ * - เพิ่มความสามารถในการแทรกรูปภาพ 5 รูปตาม Placeholder
+ */
+function autoFillAndCreatePdf(e) {
+  // --- 1. การกำหนดค่าเริ่มต้น ---
+  const templateSlideId = '1JDBCYrPqTSuTa0p-nc5Z3WMR0AYrr9qkPbPE8PYZqXk';
+  const outputFolderId = '14tDsPPahvli-V54Wzal4nuUI_KV-wVbY';
+
+  try {
+    if (!e || !e.values) {
+      Logger.log("ไม่พบข้อมูลการตอบกลับ");
+      return;
+    }
+
+    const rowData = e.values;
+    Logger.log("ข้อมูลดิบทั้งหมดที่ได้รับ: " + JSON.stringify(rowData)); // <-- เพิ่มบรรทัดนี้
+
+    // !!! แก้ไขตัวเลข 40 ให้สอดคล้องกับจำนวนคอลัมน์ขั้นต่ำของคุณ (รวมรูปภาพ)
+    if (rowData.length < 40) {
+        Logger.log("ข้อมูลที่ได้รับไม่ครบถ้วน คาดหวัง 40 คอลัมน์ แต่ได้รับ " + rowData.length);
+        return;
+    }
+
+    const templatePresentation = DriveApp.getFileById(templateSlideId);
+    const outputFolder = DriveApp.getFolderById(outputFolderId);
+
+    // --- 2. สร้างสำเนาและตั้งชื่อไฟล์ใหม่ ---
+    const memberId = rowData[3] || '';
+    const formattedMemberId = memberId.split('').join('     '); // คุณสามารถปรับจำนวนช่องว่างตรงนี้ได้
+    const fullNameTH = rowData[7] || ''; // สมมติว่าชื่อ-สกุลอยู่ที่ index 4
+    const timestamp = rowData[0];
+    const formattedTimestamp = Utilities.formatDate(new Date(timestamp), "Asia/Bangkok", "yyyyMMdd_HHmmss");
+    const fileNameIdentifier = fullNameTH || memberId || formattedTimestamp; // ตั้งชื่อไฟล์ตามชื่อ-สกุล
+    const newPresentationName = "เอกสารสมาชิก-" + fileNameIdentifier;
+
+    const newPresentationFile = templatePresentation.makeCopy(newPresentationName, outputFolder);
+    const presentation = SlidesApp.openById(newPresentationFile.getId());
+
+    // --- 3. แมปข้อมูลจาก rowData ไปยังตัวแปร ---
+    // ... (โค้ดดึงข้อมูลข้อความและ Checkbox ทั้งหมดเหมือนเดิม) ...
+    const titleData = rowData[6] || '';
+    const fullNameEN = rowData[8] || '';
+    const birthDateObj = rowData[9] ? new Date(rowData[9]) : null;
+    const todayDateObj = rowData[1] ? new Date(rowData[1]) : null;
+    const nationalId = rowData[10] || '';
+    const genderData = rowData[11] || '';
+    const nationality = rowData[12] || '';
+    const skill = rowData[13] || '';
+    const businessNameTH = rowData[14] || '';
+    const businessNameEN = rowData[15] || '';
+    const businessType = rowData[16] || '';
+    const businessRegNo = rowData[17] || '';
+    const homeStatusData = rowData[18] || '';
+    const addressNo = rowData[19] || '';
+    const village = rowData[20] || '';
+    const moo = rowData[21] || '';
+    const street = rowData[22] || '';
+    const subDistrict = rowData[23] || '';
+    const district = rowData[24] || '';
+    const province = rowData[25] || '';
+    const postalCode = rowData[26] || '';
+    const homephone = rowData[27] || '';
+    const mobile = rowData[28] || '';
+    const email = rowData[5] || '';
+    const email1 = rowData[29] || '';
+    const lineId = rowData[30] || '';
+    const address = rowData[31] || '';
+    const birthDate = birthDateObj ? Utilities.formatDate(birthDateObj, "Asia/Bangkok", "dd/MM/yyyy") : '';
+    const todayDate = todayDateObj ? Utilities.formatDate(todayDateObj, "Asia/Bangkok", "dd/MM/yyyy") : '';
+    const income = rowData[32] || '';
+    const saving = rowData[33] || '';
+    const formaldebt = rowData[34] || '';
+    const informaldebt = rowData[35] || '';
+    const farmingInput  = rowData[36] || '';
+    const farmingNumber = parseInt(farmingInput) || 0;
+    const horticultureInput = rowData[37] || '';
+    const horticultureNumber = parseInt(horticultureInput) || 0;
+    const fieldInput = rowData[38] || '';
+    const fieldNumber = parseInt(fieldInput) || 0;
+    const ownerInput = rowData[39] || '';
+    const exportbusinessInput = rowData[40] || '';
+    const factoryInput = rowData[41] || '';
+    const government = rowData[42] || '';
+    const agency = rowData[43] || '';
+    const position = rowData[44] || '';
+    const employee = rowData[45] || '';
+    const landname = rowData[46] || '';
+    const landlocation = rowData[47] || '';
+    const landright = rowData[48] || '';
+    const area = rowData[49] || '';
+    const crop = rowData[50] || '';
+    const detail1 = rowData[52] || '';
+    const detail2 = rowData[54] || '';
+    const detail3 = rowData[56] || '';
+    const detail4 = rowData[58] || '';
+    const activity = rowData[59] || '';
+    const year = rowData[60] || '';
+    const result = rowData[61] || '';
+    const want = rowData[62] || '';
+    const prash = rowData[65] || '';
+    const expert = rowData[66] || '';
+    const addition = rowData[68] || '';
+    const aboutme = rowData[69] || '';
+    const age = rowData[70] || '';
+    const highschool = rowData[71] || '';
+    const bachelor = rowData[72] || '';
+    const master = rowData[73] || '';
+    const skill1 = rowData[74] || '';
+    const skill2 = rowData[75] || '';
+    const skill3 = rowData[76] || '';
+    const skill4 = rowData[77] || '';
+    const exp1 = rowData[78] || '';
+    const exp2 = rowData[79] || '';
+    const exp3 = rowData[80] || '';
+    const exp4 = rowData[81] || '';
+    const motto1 = rowData[82] || '';
+    const motto2 = rowData[83] || '';
+    const motto3 = rowData[84] || '';
+    const volunteer1 = rowData[85] || '';
+    const volunteer2 = rowData[86] || '';
+    const volunteer3 = rowData[87] || '';
+    const volunteer4 = rowData[88] || '';
+    const landtitle = rowData[51] || '';
+    const landInput = (landtitle === "มี/ Yes");
+    const agricultural = rowData[53] || '';
+    const agriculturalInput = (agricultural === "มี/ Yes"); // แก้ไขชื่อตัวแปรที่ผิด
+    const lease = rowData[55] || '';
+    const leaseInput = (lease === "มี/ Yes");
+    const projectcoop = rowData[57] || '';
+    const projectcoopInput = (projectcoop === "มี/ Yes");
+    const headofcarbon = rowData[63] || '';
+    const ifcansell = rowData[64] || '';
+
+    // --- ส่วนที่เติมเข้ามา: ดึง ID ของไฟล์รูปภาพ ---
+    // !!! แก้ไขเลข Index ให้ตรงกับคอลัมน์ที่เก็บไฟล์รูปภาพของคุณ !!!
+    // --- ส่วนที่แก้ไขแล้ว: ดึง ID ของไฟล์รูปภาพจากข้อความเดียวกัน ---
+    // !!! แก้ไขเลข 89 ให้ตรงกับคอลัมน์ที่เก็บ URL ทั้งหมดของคุณ !!!
+    const allImageUrlsString = rowData[89] || '';
+
+    // แยก URL แต่ละอันออกจากกันด้วยเครื่องหมาย ", "
+    const urlArray = allImageUrlsString.split(/,\s*/);
+
+    // --- แล้วนำส่วนนี้ไปวางแทน ---
+
+    // !!! แก้ไขเลข 89 ให้เป็น Index เริ่มต้นของรูปภาพรูปแรกของคุณ !!!
+    const imageUrl1 = rowData[89] || '';
+    const imageUrl2 = rowData[90] || '';
+    const imageUrl3 = rowData[91] || '';
+    const imageUrl4 = rowData[92] || '';
+    const imageUrl5 = rowData[93] || '';
+    const imageUrl6 = rowData[94] || '';
+
+    // ใช้ฟังก์ชัน extractIdFromUrl ที่มีอยู่แล้วเพื่อดึงเฉพาะ ID ออกมา
+    const imageFileId1 = extractIdFromUrl(imageUrl1);
+    const imageFileId2 = extractIdFromUrl(imageUrl2);
+    const imageFileId3 = extractIdFromUrl(imageUrl3);
+    const imageFileId4 = extractIdFromUrl(imageUrl4);
+    const imageFileId5 = extractIdFromUrl(imageUrl5);
+    const imageFileId6 = extractIdFromUrl(imageUrl6);
+    
+    // --- วางโค้ด Logger.log ที่นี่ ---
+    Logger.log("--- ตรวจสอบ ID รูปภาพ ---");
+    Logger.log("ID รูปที่ 1 ที่ได้รับคือ: '" + imageFileId1 + "'");
+    Logger.log("ID รูปที่ 2 ที่ได้รับคือ: '" + imageFileId2 + "'");
+    Logger.log("ID รูปที่ 3 ที่ได้รับคือ: '" + imageFileId3 + "'");
+    Logger.log("ID รูปที่ 4 ที่ได้รับคือ: '" + imageFileId4 + "'");
+    Logger.log("ID รูปที่ 5 ที่ได้รับคือ: '" + imageFileId5 + "'");
+    Logger.log("ID รูปที่ 6 ที่ได้รับคือ: '" + imageFileId6 + "'");
+    // (สามารถเพิ่ม log สำหรับรูปที่ 3, 4, 5, 6 ได้ตามต้องการ)
+    Logger.log("-----------------------");
+
+    // --- 4. แทนที่ Placeholder ทั้งหมด (เวอร์ชันตรวจสอบข้อผิดพลาด) ---
+    const slides = presentation.getSlides();
+    for (const slide of slides) {
+      const replacements = {
+        "<<รหัสสมาชิก>>": formattedMemberId,
+        "<<สัญชาติ>>": nationality,
+        "<<ชื่อสกุล>>": fullNameTH,
+        "<<Name>>": fullNameEN,
+        "<<วันเกิด>>": birthDate, // <-- ใช้ birthDate (String)
+        "<<เลขบัตรประจำตัวประชาชน>>": nationalId,
+        "<<เลขที่>>": addressNo,
+        "<<หมู่บ้าน>>": village,
+        "<<หมู่ที่>>": moo,
+        "<<ถนน>>": street,
+        "<<แขวง>>": subDistrict,
+        "<<เขต>>": district,
+        "<<จังหวัด>>": province,
+        "<<รหัสไปรษณีย์>>": postalCode,
+        "<<มือถือ>>": mobile,
+        "<<อีเมล>>": email,
+        "<<อีเมล1>>": email1,
+        "<<Line>>": lineId,
+        "<<ชื่อธุรกิจ>>": businessNameTH,
+        "<<Businessname>>": businessNameEN,
+        "<<ประเภททะเบียนธุรกิจ>>": businessType,
+        "<<เลขทะเบียนธุรกิจ>>": businessRegNo,
+        "<<ความสามารถ>>": skill,
+        "<<ที่อยู่>>": address,
+        "<<โทรศัพท์บ้าน>>": homephone,
+        "<<วันที่>>": todayDate, // <-- ใช้ todayDate (String)
+        "<<รายได้เฉลี่ยต่อเดือน>>": income,
+        "<<เงินเก็บต่อเดือน>>": saving,
+        "<<หนี้สินในระบบ>>": formaldebt,
+        "<<หนี้สินนอกระบบ>>": informaldebt,
+        "<<farming>>": farmingInput,
+        "<<horticulture>>": horticultureInput,
+        "<<field>>": fieldInput,
+        "<<owner>>": ownerInput,
+        "<<export>>": exportbusinessInput,
+        "<<factory>>": factoryInput,
+        "<<government>>": government,
+        "<<agency>>": agency,
+        "<<position>>": position,
+        "<<employee>>": employee,
+        "<<ชื่อเจ้าของที่ดิน>>": landname,
+        "<<ที่ตั้งแปลง>>": landlocation,
+        "<<เลขที่แปลง>>": landright,
+        "<<ขนาดพื้นที่>>": area,
+        "<<พืชที่ปลูก>>": crop,
+        "<<detail1>>": detail1,
+        "<<detail2>>": detail2,
+        "<<detail3>>": detail3,
+        "<<detail4>>": detail4,
+        "<<activity>>": activity,
+        "<<year>>": year,
+        "<<result>>": result,
+        "<<ความต้องการ>>": want,
+        "<<ชื่อปราช>>": prash,
+        "<<ความชำนาญ>>": expert,
+        "<<ข้อเสนอแนะเพิ่มเติม>>": addition,
+        "<<เกี่ยวกับฉัน>>": aboutme,
+        "<<อายุ>>": age,
+        "<<มัธยม>>": highschool,
+        "<<ตรี>>": bachelor,
+        "<<โท>>": master,
+        "<<ทักษะ1>>": skill1,
+        "<<ทักษะ2>>": skill2,
+        "<<ทักษะ3>>": skill3,
+        "<<ทักษะ4>>": skill4,
+        "<<ประสบการณ์1>>": exp1,
+        "<<ประสบการณ์2>>": exp2,
+        "<<ประสบการณ์3>>": exp3,
+        "<<ประสบการณ์4>>": exp4,
+        "<<คติประจำใจ1>>": motto1,
+        "<<คติประจำใจ2>>": motto2,
+        "<<คติประจำใจ3>>": motto3,
+        "<<อาสาสมัคร1>>": volunteer1,
+        "<<อาสาสมัคร2>>": volunteer2,
+        "<<อาสาสมัคร3>>": volunteer3,
+        "<<อาสาสมัคร4>>": volunteer4,
+        // --- Checkboxes ---
+        "<<นาย>>": titleData === "นาย" ? "✔️" : "",
+        "<<นาง>>": titleData === "นาง" ? "✔️" : "",
+        "<<นางสาว>>": titleData === "นางสาว" ? "✔️" : "",
+        "<<ชาย>>": genderData.includes("ชาย") ? "✔️" : "",
+        "<<หญิง>>": genderData.includes("หญิง") ? "✔️" : "",
+        "<<บ้าน>>": homeStatusData.includes("บ้าน") ? "✔️" : "",
+        "<<สถาน>>": homeStatusData.includes("สถาน") ? "✔️" : "",
+        "<<ทำนา>>": farmingNumber > 1 ? "✔️" : "",
+        "<<ทำสวน>>": horticultureNumber > 1 ? "✔️" : "",
+        "<<ทำไร่>>": fieldNumber > 1 ? "✔️" : "",
+        "<<ธุรกิจส่วนตัว>>": (ownerInput && ownerInput !== '-') ? "✔️" : "",
+        "<<ธุรกิจส่งออก>>": (exportbusinessInput && exportbusinessInput !== '-') ? "✔️" : "",
+        "<<โรงงาน>>": (factoryInput && factoryInput !== '-') ? "✔️" : "",
+        "<<ข้าราชการ>>": (government && government !== '-') ? "✔️" : "",
+        "<<ลูกจ้าง>>": (employee && employee !== '-') ? "✔️" : "",
+        "<<yes1>>": landInput ? "✔️" : "",
+        "<<no1>>": landtitle === "ไม่มี/ No" ? "✔️" : "",
+        "<<ที่ดิน>>": landInput ? "✔️" : "",
+        "<<yes2>>": agriculturalInput ? "✔️" : "",
+        "<<no2>>": agricultural === "ไม่มี/ No" ? "✔️" : "",
+        "<<เอกสาร>>": agriculturalInput ? "✔️" : "",
+        "<<yes3>>": leaseInput ? "✔️" : "",
+        "<<no3>>": lease === "ไม่มี/ No" ? "✔️" : "",
+        "<<สัญญาเช่าที่ดิน>>": leaseInput ? "✔️" : "",
+        "<<yes4>>": projectcoopInput ? "✔️" : "",
+        "<<no4>>": projectcoop === "ไม่มี/ No" ? "✔️" : "",
+        "<<โครงการ>>": projectcoopInput ? "✔️" : "",
+        "<<heard>>": headofcarbon === "เคยได้ยิน / Heard of Carbon Credit" ? "✔️" : "",
+        "<<never>>": headofcarbon === "ไม่เคยได้ยิน / Never Heard" ? "✔️" : "",
+        "<<ต้องการ>>": ifcansell === "ต้องการ / Yes" ? "✔️" : "",
+        "<<ไม่ต้องการ>>": ifcansell === "ไม่ต้องการ / No" ? "✔️" : "",
+        "<<ไม่แน่ใจ>>": ifcansell === "ยังไม่แน่ใจ / Not Sure" ? "✔️" : ""
+      };
+
+      for (const placeholder in replacements) {
+        try {
+          const value = replacements[placeholder];
+          // ตรวจสอบให้แน่ใจว่าเป็น String ก่อนส่งค่า
+          slide.replaceAllText(placeholder, String(value));
+        } catch (err) {
+          Logger.log(`เกิด Error ที่ Placeholder: ${placeholder}`);
+          Logger.log(`ค่าที่พยายามจะใส่คือ: ${replacements[placeholder]}`);
+          Logger.log(`ประเภทของค่าคือ: ${typeof replacements[placeholder]}`);
+          // ส่ง Error ต่อเพื่อให้ catch ด้านนอกสุดทำงาน
+          throw new Error(`ล้มเหลวที่ Placeholder: ${placeholder} - ${err.message}`);
+        }
+      }
+
+      // --- ส่วนของการแทรกรูปภาพ ---
+      insertImageByPlaceholder(slide, 'image_placeholder_1', imageFileId1);
+      insertImageByPlaceholder(slide, 'image_placeholder_2', imageFileId2);
+      insertImageByPlaceholder(slide, 'image_placeholder_3', imageFileId3);
+      insertImageByPlaceholder(slide, 'image_placeholder_4', imageFileId4);
+      insertImageByPlaceholder(slide, 'image_placeholder_5', imageFileId5);
+      insertImageByPlaceholder(slide, 'image_placeholder_6', imageFileId6);
+    }
+
+    // --- 5. บันทึกและแปลงเป็น PDF ---
+    presentation.saveAndClose();
+
+    const pdfBlob = newPresentationFile.getAs('application/pdf');
+    const pdfFile = outputFolder.createFile(pdfBlob);
+    pdfFile.setName(newPresentationName + '.pdf');
+
+    Logger.log("สร้างไฟล์ PDF สำเร็จ: " + pdfFile.getName());
+
+  } catch (err) {
+    Logger.log("เกิดข้อผิดพลาดร้ายแรง: " + err.message);
+    Logger.log("Stack Trace: " + err.stack);
+    Logger.log("ข้อมูลที่ได้รับ (e.values): " + (e && e.values ? e.values.join(', ') : "ไม่มีข้อมูล"));
+  }
+}
