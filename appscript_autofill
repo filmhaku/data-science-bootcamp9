@@ -1,14 +1,13 @@
+// --- ฟังก์ชันช่วยสำหรับดึง ID จาก URL ---
 function extractIdFromUrl(url) {
   if (!url || typeof url !== 'string') return null;
   const match = url.match(/[-\w]{25,}/);
   return match ? match[0] : null;
 }
-// --- ฟังก์ชันช่วยสำหรับแทรกรูปภาพ ---
-// วางฟังก์ชันนี้ไว้นอกฟังก์ชันหลักเพื่อความเป็นระเบียบ
+
 // --- ฟังก์ชันช่วยสำหรับแทรกรูปภาพ (เวอร์ชันปรับปรุงใหม่) ---
-// ฟังก์ชันนี้จะปรับขนาดรูปภาพให้พอดีกับกรอบ โดยรักษาสัดส่วนเดิม และจัดให้อยู่กึ่งกลาง
 function insertImageByPlaceholder(slide, placeholderName, fileId) {
-  if (!fileId) return; // ถ้าไม่มีไฟล์แนบมา ก็ไม่ต้องทำอะไร 
+  if (!fileId) return; // ถ้าไม่มีไฟล์แนบมา ก็ไม่ต้องทำอะไร
 
   const placeholderShape = slide.getShapes().find(shape => shape.getTitle() === placeholderName);
 
@@ -18,47 +17,34 @@ function insertImageByPlaceholder(slide, placeholderName, fileId) {
       const insertedImage = slide.insertImage(imageBlob);
 
       // --- ส่วนที่เพิ่มเข้ามา: การคำนวณขนาดและตำแหน่งใหม่ ---
-
-      // 1. ดึงขนาดของกรอบ Placeholder และรูปภาพต้นฉบับ
       const placeholderWidth = placeholderShape.getWidth();
       const placeholderHeight = placeholderShape.getHeight();
       const imageWidth = insertedImage.getInherentWidth();
       const imageHeight = insertedImage.getInherentHeight();
-
-      // 2. คำนวณสัดส่วน (Aspect Ratio)
       const placeholderRatio = placeholderWidth / placeholderHeight;
       const imageRatio = imageWidth / imageHeight;
 
       let newWidth = placeholderWidth;
       let newHeight = placeholderHeight;
 
-      // 3. เปรียบเทียบสัดส่วนเพื่อหาขนาดใหม่ที่เหมาะสม
       if (imageRatio > placeholderRatio) {
-        // ถ้ารูปภาพ "กว้างกว่า" กรอบ ให้ยึดความกว้างของกรอบเป็นหลัก
         newWidth = placeholderWidth;
         newHeight = placeholderWidth / imageRatio;
       } else {
-        // ถ้ารูปภาพ "สูงกว่า" กรอบ ให้ยึดความสูงของกรอบเป็นหลัก
         newHeight = placeholderHeight;
         newWidth = placeholderHeight * imageRatio;
       }
 
-      // 4. คำนวณตำแหน่งเพื่อจัดให้รูปภาพอยู่กึ่งกลางกรอบ
       const leftOffset = (placeholderWidth - newWidth) / 2;
       const topOffset = (placeholderHeight - newHeight) / 2;
-      
       const newLeft = placeholderShape.getLeft() + leftOffset;
       const newTop = placeholderShape.getTop() + topOffset;
 
-      // 5. กำหนดขนาดและตำแหน่งใหม่ให้กับรูปภาพ
       insertedImage.setLeft(newLeft);
       insertedImage.setTop(newTop);
       insertedImage.setWidth(newWidth);
       insertedImage.setHeight(newHeight);
 
-      // --- สิ้นสุดส่วนที่เพิ่มเข้ามา ---
-
-      // ลบ Placeholder ทิ้งไป
       placeholderShape.remove();
       Logger.log(`แทรกรูปภาพสำหรับ ${placeholderName} สำเร็จ`);
     } catch (imgErr) {
@@ -72,11 +58,12 @@ function insertImageByPlaceholder(slide, placeholderName, fileId) {
  * ชื่อฟังก์ชัน: autoFillAndCreatePdf
  * คำอธิบาย:
  * - เพิ่มความสามารถในการแทรกรูปภาพ 5 รูปตาม Placeholder
+ * - เพิ่มความสามารถในการส่งไฟล์ PDF ที่สร้างเสร็จแล้วไปยังอีเมลของผู้กรอกฟอร์ม
  */
 function autoFillAndCreatePdf(e) {
   // --- 1. การกำหนดค่าเริ่มต้น ---
-  const templateSlideId = '1JDBCYrPqTSuTa0p-nc5Z3WMR0AYrr9qkPbPE8PYZqXk';
-  const outputFolderId = '14tDsPPahvli-V54Wzal4nuUI_KV-wVbY';
+  const templateSlideId = '1evKIasF8QTQqcYxXTEhJtokxC19rj3K0a0AmdcSebFA';
+  const outputFolderId = '1ToQv9jIGIfqBP0mLMYVXuz8aZtlL8f1g';
 
   try {
     if (!e || !e.values) {
@@ -85,9 +72,8 @@ function autoFillAndCreatePdf(e) {
     }
 
     const rowData = e.values;
-    Logger.log("ข้อมูลดิบทั้งหมดที่ได้รับ: " + JSON.stringify(rowData)); // <-- เพิ่มบรรทัดนี้
+    Logger.log("ข้อมูลดิบทั้งหมดที่ได้รับ: " + JSON.stringify(rowData));
 
-    // !!! แก้ไขตัวเลข 40 ให้สอดคล้องกับจำนวนคอลัมน์ขั้นต่ำของคุณ (รวมรูปภาพ)
     if (rowData.length < 40) {
         Logger.log("ข้อมูลที่ได้รับไม่ครบถ้วน คาดหวัง 40 คอลัมน์ แต่ได้รับ " + rowData.length);
         return;
@@ -98,18 +84,17 @@ function autoFillAndCreatePdf(e) {
 
     // --- 2. สร้างสำเนาและตั้งชื่อไฟล์ใหม่ ---
     const memberId = rowData[3] || '';
-    const formattedMemberId = memberId.split('').join('     '); // คุณสามารถปรับจำนวนช่องว่างตรงนี้ได้
-    const fullNameTH = rowData[7] || ''; // สมมติว่าชื่อ-สกุลอยู่ที่ index 4
+    const formattedMemberId = memberId.split('').join('      ');
+    const fullNameTH = rowData[7] || '';
     const timestamp = rowData[0];
     const formattedTimestamp = Utilities.formatDate(new Date(timestamp), "Asia/Bangkok", "yyyyMMdd_HHmmss");
-    const fileNameIdentifier = fullNameTH || memberId || formattedTimestamp; // ตั้งชื่อไฟล์ตามชื่อ-สกุล
+    const fileNameIdentifier = fullNameTH || memberId || formattedTimestamp;
     const newPresentationName = "เอกสารสมาชิก-" + fileNameIdentifier;
 
     const newPresentationFile = templatePresentation.makeCopy(newPresentationName, outputFolder);
     const presentation = SlidesApp.openById(newPresentationFile.getId());
 
     // --- 3. แมปข้อมูลจาก rowData ไปยังตัวแปร ---
-    // ... (โค้ดดึงข้อมูลข้อความและ Checkbox ทั้งหมดเหมือนเดิม) ...
     const titleData = rowData[6] || '';
     const fullNameEN = rowData[8] || '';
     const birthDateObj = rowData[9] ? new Date(rowData[9]) : null;
@@ -195,53 +180,51 @@ function autoFillAndCreatePdf(e) {
     const landtitle = rowData[51] || '';
     const landInput = (landtitle === "มี/ Yes");
     const agricultural = rowData[53] || '';
-    const agriculturalInput = (agricultural === "มี/ Yes"); // แก้ไขชื่อตัวแปรที่ผิด
+    const agriculturalInput = (agricultural === "มี/ Yes");
     const lease = rowData[55] || '';
     const leaseInput = (lease === "มี/ Yes");
     const projectcoop = rowData[57] || '';
     const projectcoopInput = (projectcoop === "มี/ Yes");
     const headofcarbon = rowData[63] || '';
     const ifcansell = rowData[64] || '';
+    const major1 = rowData[95] || '';
+    const major2 = rowData[96] || '';
+    const fullTitleName = `${titleData} ${fullNameTH}`;
 
-    // --- ส่วนที่เติมเข้ามา: ดึง ID ของไฟล์รูปภาพ ---
-    // !!! แก้ไขเลข Index ให้ตรงกับคอลัมน์ที่เก็บไฟล์รูปภาพของคุณ !!!
-    // --- ส่วนที่แก้ไขแล้ว: ดึง ID ของไฟล์รูปภาพจากข้อความเดียวกัน ---
-    // !!! แก้ไขเลข 89 ให้ตรงกับคอลัมน์ที่เก็บ URL ทั้งหมดของคุณ !!!
-    const allImageUrlsString = rowData[89] || '';
-
-    // แยก URL แต่ละอันออกจากกันด้วยเครื่องหมาย ", "
-    const urlArray = allImageUrlsString.split(/,\s*/);
-
-    // --- แล้วนำส่วนนี้ไปวางแทน ---
-
-    // !!! แก้ไขเลข 89 ให้เป็น Index เริ่มต้นของรูปภาพรูปแรกของคุณ !!!
+    // ดึง ID ของไฟล์รูปภาพ
     const imageUrl1 = rowData[89] || '';
     const imageUrl2 = rowData[90] || '';
     const imageUrl3 = rowData[91] || '';
     const imageUrl4 = rowData[92] || '';
     const imageUrl5 = rowData[93] || '';
     const imageUrl6 = rowData[94] || '';
+    const imageUrl7 = rowData[97] || '';
+    const imageUrl8 = rowData[98] || '';
+    const imageUrl9 = rowData[99] || '';
 
-    // ใช้ฟังก์ชัน extractIdFromUrl ที่มีอยู่แล้วเพื่อดึงเฉพาะ ID ออกมา
     const imageFileId1 = extractIdFromUrl(imageUrl1);
     const imageFileId2 = extractIdFromUrl(imageUrl2);
     const imageFileId3 = extractIdFromUrl(imageUrl3);
     const imageFileId4 = extractIdFromUrl(imageUrl4);
     const imageFileId5 = extractIdFromUrl(imageUrl5);
     const imageFileId6 = extractIdFromUrl(imageUrl6);
+    const imageFileId7 = extractIdFromUrl(imageUrl7);
+    const imageFileId8 = extractIdFromUrl(imageUrl8);
+    const imageFileId9 = extractIdFromUrl(imageUrl9);
     
-    // --- วางโค้ด Logger.log ที่นี่ ---
     Logger.log("--- ตรวจสอบ ID รูปภาพ ---");
-    Logger.log("ID รูปที่ 1 ที่ได้รับคือ: '" + imageFileId1 + "'");
-    Logger.log("ID รูปที่ 2 ที่ได้รับคือ: '" + imageFileId2 + "'");
-    Logger.log("ID รูปที่ 3 ที่ได้รับคือ: '" + imageFileId3 + "'");
-    Logger.log("ID รูปที่ 4 ที่ได้รับคือ: '" + imageFileId4 + "'");
-    Logger.log("ID รูปที่ 5 ที่ได้รับคือ: '" + imageFileId5 + "'");
-    Logger.log("ID รูปที่ 6 ที่ได้รับคือ: '" + imageFileId6 + "'");
-    // (สามารถเพิ่ม log สำหรับรูปที่ 3, 4, 5, 6 ได้ตามต้องการ)
+    Logger.log("ID รูปที่ 1: '" + imageFileId1 + "'");
+    Logger.log("ID รูปที่ 2: '" + imageFileId2 + "'");
+    Logger.log("ID รูปที่ 3: '" + imageFileId3 + "'");
+    Logger.log("ID รูปที่ 4: '" + imageFileId4 + "'");
+    Logger.log("ID รูปที่ 5: '" + imageFileId5 + "'");
+    Logger.log("ID รูปที่ 6: '" + imageFileId6 + "'");
+    Logger.log("ID รูปที่ 7: '" + imageFileId7 + "'");
+    Logger.log("ID รูปที่ 8: '" + imageFileId8 + "'");
+    Logger.log("ID รูปที่ 9: '" + imageFileId9 + "'");
     Logger.log("-----------------------");
 
-    // --- 4. แทนที่ Placeholder ทั้งหมด (เวอร์ชันตรวจสอบข้อผิดพลาด) ---
+    // --- 4. แทนที่ Placeholder ทั้งหมด ---
     const slides = presentation.getSlides();
     for (const slide of slides) {
       const replacements = {
@@ -249,7 +232,7 @@ function autoFillAndCreatePdf(e) {
         "<<สัญชาติ>>": nationality,
         "<<ชื่อสกุล>>": fullNameTH,
         "<<Name>>": fullNameEN,
-        "<<วันเกิด>>": birthDate, // <-- ใช้ birthDate (String)
+        "<<วันเกิด>>": birthDate,
         "<<เลขบัตรประจำตัวประชาชน>>": nationalId,
         "<<เลขที่>>": addressNo,
         "<<หมู่บ้าน>>": village,
@@ -270,7 +253,7 @@ function autoFillAndCreatePdf(e) {
         "<<ความสามารถ>>": skill,
         "<<ที่อยู่>>": address,
         "<<โทรศัพท์บ้าน>>": homephone,
-        "<<วันที่>>": todayDate, // <-- ใช้ todayDate (String)
+        "<<วันที่>>": todayDate,
         "<<รายได้เฉลี่ยต่อเดือน>>": income,
         "<<เงินเก็บต่อเดือน>>": saving,
         "<<หนี้สินในระบบ>>": formaldebt,
@@ -321,7 +304,8 @@ function autoFillAndCreatePdf(e) {
         "<<อาสาสมัคร2>>": volunteer2,
         "<<อาสาสมัคร3>>": volunteer3,
         "<<อาสาสมัคร4>>": volunteer4,
-        // --- Checkboxes ---
+        "<<สาขา1>>": major1,
+        "<<สาขา2>>": major2,
         "<<นาย>>": titleData === "นาย" ? "✔️" : "",
         "<<นาง>>": titleData === "นาง" ? "✔️" : "",
         "<<นางสาว>>": titleData === "นางสาว" ? "✔️" : "",
@@ -353,19 +337,16 @@ function autoFillAndCreatePdf(e) {
         "<<never>>": headofcarbon === "ไม่เคยได้ยิน / Never Heard" ? "✔️" : "",
         "<<ต้องการ>>": ifcansell === "ต้องการ / Yes" ? "✔️" : "",
         "<<ไม่ต้องการ>>": ifcansell === "ไม่ต้องการ / No" ? "✔️" : "",
-        "<<ไม่แน่ใจ>>": ifcansell === "ยังไม่แน่ใจ / Not Sure" ? "✔️" : ""
+        "<<ไม่แน่ใจ>>": ifcansell === "ยังไม่แน่ใจ / Not Sure" ? "✔️" : "",
+        "<<คำนำหน้าชื่อ>>": fullTitleName
       };
 
       for (const placeholder in replacements) {
         try {
           const value = replacements[placeholder];
-          // ตรวจสอบให้แน่ใจว่าเป็น String ก่อนส่งค่า
           slide.replaceAllText(placeholder, String(value));
         } catch (err) {
-          Logger.log(`เกิด Error ที่ Placeholder: ${placeholder}`);
-          Logger.log(`ค่าที่พยายามจะใส่คือ: ${replacements[placeholder]}`);
-          Logger.log(`ประเภทของค่าคือ: ${typeof replacements[placeholder]}`);
-          // ส่ง Error ต่อเพื่อให้ catch ด้านนอกสุดทำงาน
+          Logger.log(`เกิด Error ที่ Placeholder: ${placeholder} ด้วยค่า: ${replacements[placeholder]}`);
           throw new Error(`ล้มเหลวที่ Placeholder: ${placeholder} - ${err.message}`);
         }
       }
@@ -377,6 +358,9 @@ function autoFillAndCreatePdf(e) {
       insertImageByPlaceholder(slide, 'image_placeholder_4', imageFileId4);
       insertImageByPlaceholder(slide, 'image_placeholder_5', imageFileId5);
       insertImageByPlaceholder(slide, 'image_placeholder_6', imageFileId6);
+      insertImageByPlaceholder(slide, 'image_placeholder_7', imageFileId7);
+      insertImageByPlaceholder(slide, 'image_placeholder_8', imageFileId8);
+      insertImageByPlaceholder(slide, 'image_placeholder_9', imageFileId9);
     }
 
     // --- 5. บันทึกและแปลงเป็น PDF ---
@@ -387,6 +371,32 @@ function autoFillAndCreatePdf(e) {
     pdfFile.setName(newPresentationName + '.pdf');
 
     Logger.log("สร้างไฟล์ PDF สำเร็จ: " + pdfFile.getName());
+
+    // --- [ส่วนที่เพิ่มเข้ามา] 6. ส่งอีเมลพร้อมไฟล์ PDF ---
+    const recipientEmail = email; // ใช้ตัวแปร email ที่ดึงค่าจาก rowData[5] ไว้แล้ว
+    if (recipientEmail) {
+      try {
+        const subject = "เอกสารสมาชิกของคุณ: " + fullNameTH;
+        const body = "เรียนคุณ " + fullNameTH + ",\n\n" +
+                   "เอกสารสมาชิกของคุณได้ถูกสร้างขึ้นเรียบร้อยแล้ว กรุณาตรวจสอบความถูกต้องของข้อมูลในไฟล์ PDF ที่แนบมานี้\n\n" +
+                   "ขอแสดงความนับถือ,\n" +
+                   "ระบบอัตโนมัติ";
+        
+        MailApp.sendEmail({
+          to: recipientEmail,
+          subject: subject,
+          body: body,
+          attachments: [pdfFile.getAs(MimeType.PDF)] // แนบไฟล์ PDF ที่สร้างขึ้น
+        });
+        
+        Logger.log("ส่งอีเมลพร้อม PDF ไปที่ " + recipientEmail + " สำเร็จ");
+      } catch (emailErr) {
+        Logger.log("เกิดข้อผิดพลาดในการส่งอีเมล: " + emailErr.message);
+      }
+    } else {
+      Logger.log("ไม่พบอีเมลผู้รับ (คอลัมน์ที่ 6) ไม่สามารถส่งอีเมลได้");
+    }
+    // --- [สิ้นสุดส่วนที่เพิ่มเข้ามา] ---
 
   } catch (err) {
     Logger.log("เกิดข้อผิดพลาดร้ายแรง: " + err.message);
